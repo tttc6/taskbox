@@ -5,22 +5,65 @@ import { waitFor, waitForElementToBeRemoved } from "storybook/test";
 import { MockedState } from "./TaskList.stories";
 
 import { Provider } from "react-redux";
+import { configureStore, createSlice } from "@reduxjs/toolkit";
 
 import InboxScreen from "./InboxScreen";
 
 import store from "../lib/store";
+
+// A mock store for docs view that doesn't rely on network requests
+const MockStore = ({
+  taskboxState,
+  children,
+}: {
+  taskboxState: typeof MockedState;
+  children: React.ReactNode;
+}) => (
+  <Provider
+    store={configureStore({
+      reducer: {
+        taskbox: createSlice({
+          name: "taskbox",
+          initialState: taskboxState,
+          reducers: {
+            updateTaskState: (state, action) => {
+              const { id, newTaskState } = action.payload;
+              const task = state.tasks.findIndex((task) => task.id === id);
+              if (task >= 0) {
+                state.tasks[task].state = newTaskState;
+              }
+            },
+          },
+        }).reducer,
+      },
+    })}
+  >
+    {children}
+  </Provider>
+);
 
 const meta = {
   component: InboxScreen,
   title: "InboxScreen",
   decorators: [(story) => <Provider store={store}>{story()}</Provider>],
   tags: ["autodocs"],
+  parameters: {
+    docs: {
+      story: { inline: true },
+    },
+  },
 } satisfies Meta<typeof InboxScreen>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
+  decorators: [
+    (story) => <MockStore taskboxState={MockedState}>{story()}</MockStore>,
+  ],
+};
+
+export const WithInteractions: Story = {
   parameters: {
     msw: {
       handlers: [
@@ -44,15 +87,16 @@ export const Default: Story = {
 };
 
 export const Error: Story = {
-  parameters: {
-    msw: {
-      handlers: [
-        http.get("https://jsonplaceholder.typicode.com/todos?userId=1", () => {
-          return new HttpResponse(null, {
-            status: 403,
-          });
-        }),
-      ],
-    },
-  },
+  decorators: [
+    (story) => (
+      <MockStore
+        taskboxState={{
+          ...MockedState,
+          error: "Something went wrong",
+        }}
+      >
+        {story()}
+      </MockStore>
+    ),
+  ],
 };
